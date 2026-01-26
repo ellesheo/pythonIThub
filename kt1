@@ -1,0 +1,16 @@
+print("ЧЕГО СКАЗАТЬ-ТО ХОТЕЛ, МИЛОК?!")
+poka = 0
+while poka < 3:
+    frase = input()
+    if frase.upper() == frase:
+        if frase == "ПОКА!":
+            poka = poka + 1
+        import random
+        year = random.randint(1930, 1950)
+        print(f"НЕТ, НИ РАЗУ С {year} ГОДА!")
+        if frase != "ПОКА!":
+            poka = 0
+    elif frase.lower() == frase:
+        print("АСЬ?! ГОВОРИ ГРОМЧЕ, ВНУЧЕК!")
+        poka = 0
+print("ДО СВИДАНИЯ, МИЛЫЙ!")
