@@ -1,59 +1,49 @@
 from lib import (
-    load,
-    est,
-    vybrat,
-    start,
-    max_os,
-    show,
-    ask,
-    hod,
-    kon,
-    rez,
-    esche,
-    mes,
-    create_papka,
-    FL
+    create_word_bank,
+    has_words,
+    pick_word_with_hint,
+    init_round_state,
+    show_round,
+    prompt_answer,
+    process_turn,
+    is_round_over,
+    show_round_result,
+    ask_play_again
 )
 
 
-def igra():
-    print("\n" + "="*40)
-    print("ВИСЕЛИЦА")
-    print("="*40)
-    print("Правила:")
-    print("- Называйте буквы")
-    print("- Можно угадать слово")
-    print("- Ошибки рисуют виселицу")
-    print("="*40 + "\n")
+def get_true():
+    return True
+
+
+def get_false():
+    return False
+
+
+def main() -> None:
+    true_val = get_true()
+    false_val = get_false()
     
-    create_papka()
-    bank = load(FL)
-    m = max_os()
-    prod = True
-    
-    while prod and est(bank):
-        sl, pod, bank = vybrat(bank)
-        st = start(sl)
-        
-        print(f"\nОсталось: {len(bank)}")
-        
-        while not kon(st):
-            show(st, pod, print)
-            ot = ask("\nХод: ", input)
-            st = hod(sl, st, ot, lambda msg: mes(msg, print))
-        
-        rez(sl, st, print)
-        
-        if est(bank):
-            prod = esche(input)
+    bank = create_word_bank()
+    keep_playing = true_val
+
+    while keep_playing and has_words(bank):
+        secret_word, hint, bank = pick_word_with_hint(bank)
+
+        state = init_round_state(secret_word)
+
+        while not is_round_over(state):
+            show_round(state, hint)
+            answer = prompt_answer()
+            state = process_turn(secret_word, state, answer)
+
+        show_round_result(secret_word, state)
+
+        if has_words(bank):
+            keep_playing = ask_play_again()
         else:
-            print("\nВсе слова!")
-            prod = False
-    
-    print("\n" + "="*40)
-    print("Спасибо!")
-    print("="*40)
+            keep_playing = false_val
 
 
 if __name__ == "__main__":
-    igra()
+    main()

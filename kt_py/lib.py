@@ -1,190 +1,158 @@
 from __future__ import annotations
+
 import random
-import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
+HIDDEN_SYMBOL = "■"
 
-SK = "■"
-PA = "v"
-FL = "sl.txt"
-MAX_OS = 7
-
-
-Para = Tuple[str, str]
-
+WordItem = Tuple[str, str]
 
 @dataclass(frozen=True)
-class St:
-    pole: str
-    osh: int
-    buk: Tuple[str, ...]
-    st: str
+class RoundState:
+    table: str
+    lives: int
+    used_letters: Tuple[str, ...]
+    status: str
 
+def create_word_bank() -> List[WordItem]:
+    return [
+        ("олень", "Животное с рогами, живёт в лесах и тундре"),
+        ("носки", "Предмет одежды, который носят на ногах"),
+        ("пальто", "Верхняя одежда для прохладной погоды"),
+        ("самолёт", "Транспорт, который летает по воздуху"),
+        ("планета", "Космическое тело, вращающееся вокруг звезды"),
+    ]
 
-def load(p: str) -> List[Para]:
-    res = []
-    with open(p, 'r', encoding='utf-8') as f:
-        for s in f:
-            s = s.strip()
-            if s and not s.startswith('#'):
-                r = s.split('|')
-                if len(r) >= 2:
-                    sl = r[0].strip()
-                    pod = r[1].strip()
-                    if sl and pod:
-                        res.append((sl, pod))
-    return res
+def has_words(bank: List[WordItem]) -> bool:
+    return len(bank) > 0
 
+def pick_word_with_hint(bank: List[WordItem]) -> Tuple[str, str, List[WordItem]]:
+    index = random.randrange(len(bank))
+    word, hint = bank[index]
+    remaining = remove_item_by_index(bank, index)
+    return normalize_word(word), hint, remaining
 
-def est(sp: List[Para]) -> bool:
-    return len(sp) > 0
+def remove_item_by_index(bank: List[WordItem], index: int) -> List[WordItem]:
+    return bank[:index] + bank[index + 1:]
 
+def normalize_word(word: str) -> str:
+    return word.strip().lower()
 
-def vybrat(sp: List[Para]) -> Tuple[str, str, List[Para]]:
-    i = random.randrange(len(sp))
-    sl, pod = sp[i]
-    ost = sp[:i] + sp[i + 1:]
-    return norm(sl), pod, ost
+def init_round_state(secret_word: str) -> RoundState:
+    table = create_table(secret_word)
+    lives = get_lives(secret_word)
+    return RoundState(table=table, lives=lives, used_letters=tuple(), status="playing")
 
+def create_table(word: str) -> str:
+    return " ".join(HIDDEN_SYMBOL for _ in word)
 
-def norm(sl: str) -> str:
-    return sl.strip().lower()
+def get_lives(word: str) -> int:
+    return len(word)
 
+def show_round(state: RoundState, hint: str) -> None:
+    print(f"{state.table} | ❤×{state.lives}")
+    print(hint)
+    used = format_used_letters(state.used_letters)
+    if used:
+        print(f"Уже были: {used}")
 
-def get_v(osh: int) -> str:
-    """Читает фрагмент виселицы из отдельного файла"""
-    f = os.path.join(PA, f"v_{osh}.txt")
-    try:
-        with open(f, 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
+def format_used_letters(letters: Tuple[str, ...]) -> str:
+    if not letters:
         return ""
+    return ", ".join(letters)
 
+def prompt_answer() -> str:
+    return input("Назовите букву или слово целиком: ").strip().lower()
 
-def create_papka() -> None:
-    """Создаёт папку для фрагментов виселицы"""
-    if not os.path.exists(PA):
-        os.makedirs(PA)
+def process_turn(secret_word: str, state: RoundState, answer: str) -> RoundState:
+    cleaned = normalize_answer(answer)
+    if not cleaned:
+        show_message("Пустой ввод. Введите букву или слово.")
+        return state
 
+    if is_full_word_guess(cleaned):
+        if is_word_correct(secret_word, cleaned):
+            return set_status(state, "win")
+        show_message("Неправильно. Вы теряете жизнь.")
+        return lose_one_life(state)
 
-def start(s: str) -> St:
-    t = make_t(s)
-    return St(pole=t, osh=0, buk=tuple(), st="playing")
+    letter = cleaned[:1]
+    if not is_single_letter(letter):
+        show_message("Введите одну букву или слово целиком.")
+        return state
 
+    if is_letter_used(state.used_letters, letter):
+        show_message("Эту букву уже называли. Попробуйте другую.")
+        return state
 
-def make_t(sl: str) -> str:
-    return " ".join(SK for _ in sl)
+    new_used = add_used_letter(state.used_letters, letter)
 
+    if is_letter_in_word(secret_word, letter):
+        new_table = open_letter(secret_word, state.table, letter)
+        new_state = RoundState(table=new_table, lives=state.lives, used_letters=new_used, status="playing")
+        if is_word_opened(new_table):
+            return set_status(new_state, "win")
+        return new_state
 
-def max_os() -> int:
-    return MAX_OS
+    show_message("Неправильно. Вы теряете жизнь.")
+    return lose_one_life(RoundState(table=state.table, lives=state.lives, used_letters=new_used, status="playing"))
 
+def normalize_answer(text: str) -> str:
+    return text.strip().lower()
 
-def show(st: St, pod: str, out) -> None:
-    v = get_v(st.osh)
-    out(v)
-    out(f"\nСлово: {st.pole}")
-    out(f"Подсказка: {pod}")
-    
-    if st.buk:
-        s = ", ".join(st.buk)
-        out(f"Буквы: {s}")
-    out("")
+def is_full_word_guess(text: str) -> bool:
+    return len(text) > 1
 
+def is_word_correct(secret_word: str, answer: str) -> bool:
+    return answer == secret_word
 
-def ask(p: str, inp) -> str:
-    return inp(p).strip().lower()
+def is_single_letter(ch: str) -> bool:
+    return len(ch) == 1 and ch.isalpha()
 
+def is_letter_used(used_letters: Tuple[str, ...], letter: str) -> bool:
+    return letter in used_letters
 
-def hod(t: str, st: St, ot: str, msg) -> St:
-    ot = clean(ot)
-    
-    if not ot:
-        msg("Пусто")
-        return st
-    
-    if len(ot) > 1:
-        if ot == t:
-            msg("Верно!")
-            return set_st(st, "win")
-        msg("Не верно")
-        return add_os(st, msg)
-    
-    b = ot[:1]
-    if not (len(b) == 1 and b.isalpha()):
-        msg("Букву")
-        return st
-    
-    if b in st.buk:
-        msg(f"{b} была")
-        return st
-    
-    nov_buk = st.buk + (b,)
-    
-    if b in t:
-        nov_pole = open_b(t, st.pole, b)
-        nov = St(pole=nov_pole, osh=st.osh, buk=nov_buk, st="playing")
-        if SK not in nov_pole:
-            msg("Всё слово!")
-            return set_st(nov, "win")
-        msg(f"Есть {b}")
-        return nov
-    
-    msg(f"Нет {b}")
-    return add_os(
-        St(pole=st.pole, osh=st.osh, buk=nov_buk, st="playing"),
-        msg
-    )
+def add_used_letter(used_letters: Tuple[str, ...], letter: str) -> Tuple[str, ...]:
+    return used_letters + (letter,)
 
+def is_letter_in_word(word: str, letter: str) -> bool:
+    return letter in word
 
-def clean(txt: str) -> str:
-    return txt.strip().lower()
+def open_letter(secret_word: str, table: str, letter: str) -> str:
+    cells = table.split(" ")
+    for i, ch in enumerate(secret_word):
+        if ch == letter:
+            cells[i] = letter
+    return " ".join(cells)
 
+def is_word_opened(table: str) -> bool:
+    return HIDDEN_SYMBOL not in table
 
-def open_b(t: str, pol: str, b: str) -> str:
-    kl = pol.split(" ")
-    for i, ch in enumerate(t):
-        if ch == b:
-            kl[i] = b
-    return " ".join(kl)
+def lose_one_life(state: RoundState) -> RoundState:
+    new_lives = state.lives - 1
+    if new_lives <= 0:
+        return RoundState(table=state.table, lives=0, used_letters=state.used_letters, status="lose")
+    return RoundState(table=state.table, lives=new_lives, used_letters=state.used_letters, status="playing")
 
+def set_status(state: RoundState, status: str) -> RoundState:
+    return RoundState(table=state.table, lives=state.lives, used_letters=state.used_letters, status=status)
 
-def add_os(st: St, msg) -> St:
-    nov = st.osh + 1
-    
-    if nov >= MAX_OS:
-        msg("Проигрыш!")
-        return St(pole=st.pole, osh=nov, buk=st.buk, st="lose")
-    
-    return St(pole=st.pole, osh=nov, buk=st.buk, st="playing")
+def is_round_over(state: RoundState) -> bool:
+    return state.status in ("win", "lose")
 
+def show_round_result(secret_word: str, state: RoundState) -> None:
+    if state.status == "win":
+        print(f"{secret_word}\nВы выиграли! Приз в студию!")
+        return
+    print(f"Жизни закончились. Было загадано слово: {secret_word}")
 
-def set_st(st: St, s: str) -> St:
-    return St(pole=st.pole, osh=st.osh, buk=st.buk, st=s)
+def ask_play_again() -> bool:
+    answer = input("Сыграть ещё? (д/н): ").strip().lower()
+    return is_yes(answer)
 
+def is_yes(text: str) -> bool:
+    return text in ("д", "да", "y", "yes")
 
-def kon(st: St) -> bool:
-    return st.st in ("win", "lose")
-
-
-def rez(t: str, st: St, out) -> None:
-    if st.st == "win":
-        out("\n" + "="*40)
-        out("ВЫ ВЫИГРАЛИ!")
-        out(f"Слово: {t.upper()}")
-        out("="*40 + "\n")
-    else:
-        out("\n" + "="*40)
-        out("ВЫ ПРОИГРАЛИ")
-        out(f"Слово: {t.upper()}")
-        out("="*40 + "\n")
-
-
-def esche(inp) -> bool:
-    ot = inp("\nЕщё? (д/н): ").strip().lower()
-    return ot in ("д", "да", "y", "yes", "lf")
-
-
-def mes(m: str, out) -> None:
-    out(m)
+def show_message(msg: str) -> None:
+    print(msg)
